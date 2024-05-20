@@ -431,27 +431,21 @@ def get_services(update: Update, context):
 
 #DB
 def get_repl_logs(update: Update, context):
-    log_dir = Path('/var/log/postgresql/')
+    log_dir = Path('/app/logs')
     log_file_path = log_dir / 'postgresql.log'
 
     try:
         if log_file_path.exists():
-            log_messages = []  # Список для хранения всех записей
+            res = ""
             with open(log_file_path, 'r', encoding='utf-8') as file:
                 
                 for line in file:
-                    lower_line = line.casefold()
-                    if 'repl' in lower_line or 'репл' in lower_line:
-                        log_messages.append(line.rstrip())  # Добавляем запись в список
+                    lowerLine = line.casefold()
+                    if ('repl' in lowerLine) or ('репл' in lowerLine):
+                        res += line.rstrip() + "\n"
 
-            # Выводим только последние 15 записей, если их количество больше 15
-            if len(log_messages) > 15:
-                log_messages = log_messages[-15:]
-
-            # Формируем текст из записей
-            log_text = '\n'.join(log_messages)
-            if log_text:
-                BigMessage(update, log_text)
+            if res:
+                BigMessage(update, res)
             else:
                 update.message.reply_text("No logs\nВведите /get_bot_commands - для справки")
                 logging.info("No logs\nВведите /get_bot_commands - для справки")
