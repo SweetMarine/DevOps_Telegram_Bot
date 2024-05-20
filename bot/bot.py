@@ -396,12 +396,17 @@ def get_apt(update, context):
 def choose_option(update, context):
     option = update.message.text
     if option == 'Все пакеты':
-        command = 'dpkg -l | head -n 10'
+        # Предположим, что каждая строка имеет длину примерно 100 символов
+        num_lines = 80  # 40 строк на сообщение, для двух сообщений
+        command = f'dpkg -l | head -n {num_lines}'
         client.connect(hostname=RM_HOST, username=RM_USER, password=RM_PASSWORD, port=RM_PORT)
         stdin, stdout, stderr = client.exec_command(command)
         data = stdout.read().decode('utf-8')
         client.close()
-        update.message.reply_text(data, reply_markup=ReplyKeyboardRemove())
+        if data:
+            BigMessage(update, data, max_length=4096)
+        else:
+            update.message.reply_text('Пакеты не найдены.', reply_markup=ReplyKeyboardRemove())
     elif option == 'Один пакет':
         update.message.reply_text('Введите название пакета:')
         return 'get_specific_package'
@@ -416,8 +421,12 @@ def get_specific_package(update, context):
     stdin, stdout, stderr = client.exec_command(command)
     data = stdout.read().decode('utf-8')
     client.close()
-    update.message.reply_text(data, reply_markup=ReplyKeyboardRemove())
+    if data:
+        BigMessage(update, data, max_length=4096)
+    else:
+        update.message.reply_text('Пакет не найден.', reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
+
 
 def get_services(update: Update, context):
     client.connect(hostname=RM_HOST, username=RM_USER, password=RM_PASSWORD, port=RM_PORT)
@@ -433,28 +442,36 @@ def get_services(update: Update, context):
 def get_repl_logs(update: Update, context):
     log_dir = Path('/app/logs')
     log_file_path = log_dir / 'postgresql.log'
+    max_lines_per_message = 40
+    num_messages = 2
+    lines_needed = max_lines_per_message * num_messages
 
     try:
         if log_file_path.exists():
-            res = ""
             with open(log_file_path, 'r', encoding='utf-8') as file:
-                
-                for line in file:
-                    lowerLine = line.casefold()
-                    if ('repl' in lowerLine) or ('репл' in lowerLine):
-                        res += line.rstrip() + "\n"
+                lines = file.readlines()  # Читаем все строки
+            # Фильтрация и обработка с конца файла
+            found_lines = [line.rstrip() for line in reversed(lines) if 'repl' in line.casefold() or 'репл' in line.casefold()]
 
-            if res:
-                BigMessage(update, res)
+            # Ограничение количества строк для двух сообщений
+            if len(found_lines) > lines_needed:
+                found_lines = found_lines[:lines_needed]
+
+            if found_lines:
+                # Строки организуются в порядке свежести и отправляются через BigMessage
+                full_message = "\n".join(found_lines[:max_lines_per_message])
+                BigMessage(update, full_message)
+
+                if len(found_lines) > max_lines_per_message:
+                    full_message = "\n".join(found_lines[max_lines_per_message:])
+                    BigMessage(update, full_message)
             else:
-                update.message.reply_text("No logs\nВведите /get_bot_commands - для справки")
-                logging.info("No logs\nВведите /get_bot_commands - для справки")
+                update.message.reply_text("Логи не найдены.\nВведите /get_bot_commands - для справки")
         else:
-            update.message.reply_text("File for log didn't find\nВведите /get_bot_commands - для справки")
-            logging.error("File for log didn't find\nВведите /get_bot_commands - для справки")
+            update.message.reply_text("Файл лога не найден.\nВведите /get_bot_commands - для справки")
     except Exception as e:
-        update.message.reply_text(f"Error log: {str(e)}")
-        logging.error(f"Error log: {str(e)}")
+        update.message.reply_text(f"Ошибка доступа к файлу лога: {str(e)}")
+        logging.error(f"Ошибка доступа к файлу лога: {str(e)}")
 
 #def get_email_data(update: Update, context):
     client.connect(hostname=RM_HOST, username=RM_USER, password=RM_PASSWORD, port=RM_PORT)
